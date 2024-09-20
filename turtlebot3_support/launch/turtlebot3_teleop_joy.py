@@ -25,7 +25,11 @@ def generate_launch_description():
                 'scale_angular.yaw': 0.91,
                 'scale_linear_turbo.x': 0.26,
                 'scale_angular_turbo.yaw': 1.74,
-            }]
+                'publish_stamped_twist': True,
+            }],
+            remappings=[
+                ('/cmd_vel', '/cmd_vel_stamped')
+            ]
         )
     ])
 
