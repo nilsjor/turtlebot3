@@ -31,6 +31,8 @@ TurtleBot3::TurtleBot3(const std::string & usb_port)
   init_dynamixel_sdk_wrapper(usb_port);
   check_device_status();
 
+  init_control();
+
   add_motors();
   add_wheels();
   add_sensors();
@@ -138,6 +140,17 @@ void TurtleBot3::add_wheels()
   this->get_parameter_or<float>("wheels.radius", wheels_.radius, 0.033);
 }
 
+void TurtleBot3::init_control()
+{
+  RCLCPP_INFO(this->get_logger(), "Add Control Params");
+
+  this->declare_parameter<bool>("ctrl.use_stamped_vel", false);
+  this->declare_parameter<double>("ctrl.cmd_vel_timeout", 0.5);  // Default timeout is 0.5s
+
+  this->get_parameter("ctrl.use_stamped_vel", ctrl_.use_stamped_vel);
+  this->get_parameter("ctrl.cmd_vel_timeout", ctrl_.cmd_vel_timeout);
+}
+
 void TurtleBot3::add_sensors()
 {
   RCLCPP_INFO(this->get_logger(), "Add Sensors");
@@ -217,6 +230,7 @@ void TurtleBot3::run()
 
   publish_timer(std::chrono::milliseconds(50));
   heartbeat_timer(std::chrono::milliseconds(100));
+  drive_timer(std::chrono::milliseconds(50));  // Add the drive timer with 50ms interval
 
   parameter_event_callback();
   cmd_vel_callback();
@@ -257,6 +271,55 @@ void TurtleBot3::heartbeat_timer(const std::chrono::milliseconds timeout)
       RCLCPP_DEBUG(this->get_logger(), "hearbeat count : %d, msg : %s", count, msg.c_str());
 
       count++;
+    }
+  );
+}
+
+void TurtleBot3::drive_timer(const std::chrono::milliseconds timeout)
+{
+  drive_timer_ = this->create_wall_timer(
+    timeout,
+    [this]() -> void
+    {
+      auto current_time = this->get_clock()->now();
+
+      if (last_cmd_vel_msg_) {
+        auto time_diff = current_time - last_cmd_vel_msg_->header.stamp;
+
+        std::string sdk_msg;
+
+        union Data {
+          int32_t dword[6];
+          uint8_t byte[4 * 6];
+        } data;
+
+        if (time_diff.seconds() > ctrl_.cmd_vel_timeout) {
+          data.dword[0] = 0;
+          data.dword[5] = 0;
+        } else {
+          data.dword[0] = static_cast<int32_t>(last_cmd_vel_msg_->twist.linear.x * 100);
+          data.dword[5] = static_cast<int32_t>(last_cmd_vel_msg_->twist.angular.z * 100);
+        }
+
+        uint16_t start_addr = extern_control_table.cmd_velocity_linear_x.addr;
+        uint16_t addr_length =
+          (extern_control_table.cmd_velocity_angular_z.addr -
+            extern_control_table.cmd_velocity_linear_x.addr) +
+          extern_control_table.cmd_velocity_angular_z.length;
+
+        uint8_t *p_data = &data.byte[0];
+        dxl_sdk_wrapper_->set_data_to_device(start_addr, addr_length, p_data, &sdk_msg);
+        
+        if (time_diff.seconds() > ctrl_.cmd_vel_timeout) {
+          RCLCPP_WARN(
+            this->get_logger(), 
+            "Command timed out, applying zero velocity.");
+          last_cmd_vel_msg_ = nullptr;
+        }
+        RCLCPP_DEBUG(
+          this->get_logger(),
+          "lin_vel: %f ang_vel: %f msg : %s", last_cmd_vel_msg_->twist.linear.x, last_cmd_vel_msg_->twist.angular.z, sdk_msg.c_str());
+      }
     }
   );
 }
@@ -315,6 +378,14 @@ void TurtleBot3::parameter_event_callback()
             motors_.profile_acceleration,
             sdk_msg.c_str());
         }
+        else if (changed_parameter.name == "cmd_vel_timeout") {
+          ctrl_.cmd_vel_timeout = rclcpp::Parameter::from_parameter_msg(changed_parameter).as_double();
+
+          RCLCPP_INFO(
+            this->get_logger(),
+            "changed parameter value : %f [sec]",
+            ctrl_.cmd_vel_timeout);
+        }
       }
     };
 
@@ -324,38 +395,41 @@ void TurtleBot3::parameter_event_callback()
 void TurtleBot3::cmd_vel_callback()
 {
   auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
-  cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-    "cmd_vel",
-    qos,
-    [this](const geometry_msgs::msg::Twist::SharedPtr msg) -> void
-    {
-      std::string sdk_msg;
 
-      union Data {
-        int32_t dword[6];
-        uint8_t byte[4 * 6];
-      } data;
+  if (ctrl_.use_stamped_vel) {
+    cmd_vel_echo_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("cmd_vel_echo", qos);
 
-      data.dword[0] = static_cast<int32_t>(msg->linear.x * 100);
-      data.dword[1] = 0;
-      data.dword[2] = 0;
-      data.dword[3] = 0;
-      data.dword[4] = 0;
-      data.dword[5] = static_cast<int32_t>(msg->angular.z * 100);
+    cmd_vel_stamped_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+      "cmd_vel_stamped",
+      qos,
+      [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) -> void
+      {
+        last_cmd_vel_msg_ = msg;
 
-      uint16_t start_addr = extern_control_table.cmd_velocity_linear_x.addr;
-      uint16_t addr_length =
-      (extern_control_table.cmd_velocity_angular_z.addr -
-      extern_control_table.cmd_velocity_linear_x.addr) +
-      extern_control_table.cmd_velocity_angular_z.length;
+        if ((msg->header.stamp.sec == 0) && (msg->header.stamp.nanosec == 0))
+        {
+          RCLCPP_WARN_ONCE(
+            this->get_logger(),
+            "Received TwistStamped with zero timestamp. This message will only be shown once");
+        }
 
-      uint8_t * p_data = &data.byte[0];
+        if (cmd_vel_echo_pub_->get_subscription_count() > 0) {
+          cmd_vel_echo_pub_->publish(*msg);
+        }
+      }
+    );
+  } else {
+    cmd_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+      "cmd_vel",
+      qos,
+      [this](const geometry_msgs::msg::Twist::SharedPtr msg) -> void
+      {
+        auto twist_stamped_msg = std::make_shared<geometry_msgs::msg::TwistStamped>();
+        twist_stamped_msg->twist = *msg;
+        twist_stamped_msg->header.stamp = this->get_clock()->now();
 
-      dxl_sdk_wrapper_->set_data_to_device(start_addr, addr_length, p_data, &sdk_msg);
-
-      RCLCPP_DEBUG(
-        this->get_logger(),
-        "lin_vel: %f ang_vel: %f msg : %s", msg->linear.x, msg->angular.z, sdk_msg.c_str());
-    }
-  );
+        last_cmd_vel_msg_ = twist_stamped_msg;
+      }
+    );
+  }
 }

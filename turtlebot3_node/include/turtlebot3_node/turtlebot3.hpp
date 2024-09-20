@@ -28,7 +28,7 @@
 
 #include <tf2_ros/transform_broadcaster.h>
 
-#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/battery_state.hpp>
@@ -69,6 +69,12 @@ public:
     float profile_acceleration;
   } Motors;
 
+    typedef struct
+  {
+    bool use_stamped_vel;
+    float cmd_vel_timeout;
+  } Control;
+
   explicit TurtleBot3(const std::string & usb_port);
   virtual ~TurtleBot3() {}
 
@@ -79,6 +85,8 @@ private:
   void init_dynamixel_sdk_wrapper(const std::string & usb_port);
   void check_device_status();
 
+  void init_control();
+
   void add_sensors();
   void add_devices();
   void add_motors();
@@ -88,12 +96,14 @@ private:
 
   void publish_timer(const std::chrono::milliseconds timeout);
   void heartbeat_timer(const std::chrono::milliseconds timeout);
+  void drive_timer(const std::chrono::milliseconds timeout);
 
   void cmd_vel_callback();
   void parameter_event_callback();
 
   Wheels wheels_;
   Motors motors_;
+  Control ctrl_;
 
   std::shared_ptr<DynamixelSDKWrapper> dxl_sdk_wrapper_;
 
@@ -106,8 +116,13 @@ private:
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
   rclcpp::TimerBase::SharedPtr heartbeat_timer_;
+  rclcpp::TimerBase::SharedPtr drive_timer_;
 
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_ = nullptr;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_stamped_sub_ = nullptr;
+  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_echo_pub_ = nullptr;
+
+  geometry_msgs::msg::TwistStamped::SharedPtr last_cmd_vel_msg_ = nullptr;
 
   rclcpp::AsyncParametersClient::SharedPtr priv_parameters_client_;
   rclcpp::Subscription<rcl_interfaces::msg::ParameterEvent>::SharedPtr parameter_event_sub_;
