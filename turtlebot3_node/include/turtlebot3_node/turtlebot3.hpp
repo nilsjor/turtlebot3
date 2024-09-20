@@ -121,7 +121,7 @@ private:
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_ = nullptr;
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_stamped_sub_ = nullptr;
-  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_echo_pub_ = nullptr;
+  rclcpp::Publisher<builtin_interfaces::msg::Time>::SharedPtr cmd_vel_delay_pub_ = nullptr;
 
   geometry_msgs::msg::TwistStamped::SharedPtr last_cmd_vel_msg_ = nullptr;
 

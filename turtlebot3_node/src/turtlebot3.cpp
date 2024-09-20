@@ -399,7 +399,7 @@ void TurtleBot3::cmd_vel_callback()
   auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
 
   if (ctrl_.use_stamped_vel) {
-    cmd_vel_echo_pub_ = this->create_publisher<geometry_msgs::msg::TwistStamped>("cmd_vel_echo", qos);
+    cmd_vel_delay_pub_ = this->create_publisher<builtin_interfaces::msg::Time>("cmd_vel_delay", qos);
 
     cmd_vel_stamped_sub_ = this->create_subscription<geometry_msgs::msg::TwistStamped>(
       "cmd_vel_stamped",
@@ -408,15 +408,22 @@ void TurtleBot3::cmd_vel_callback()
       {
         last_cmd_vel_msg_ = msg;
 
-        if ((msg->header.stamp.sec == 0) && (msg->header.stamp.nanosec == 0))
-        {
+        if ((msg->header.stamp.sec == 0) && (msg->header.stamp.nanosec == 0)) {
           RCLCPP_WARN_ONCE(
             this->get_logger(),
             "Received TwistStamped with zero timestamp. This message will only be shown once");
+            return;
         }
 
-        if (cmd_vel_echo_pub_->get_subscription_count() > 0) {
-          cmd_vel_echo_pub_->publish(*msg);
+        auto current_time = this->get_clock()->now();
+        auto time_diff = current_time - msg->header.stamp;
+
+        builtin_interfaces::msg::Time time_diff_msg;
+        time_diff_msg.sec = static_cast<int32_t>(time_diff.seconds());
+        time_diff_msg.nanosec = static_cast<uint32_t>(time_diff.nanoseconds());
+
+        if (cmd_vel_delay_pub_->get_subscription_count() > 0) {
+          cmd_vel_delay_pub_->publish(time_diff_msg);
         }
       }
     );
