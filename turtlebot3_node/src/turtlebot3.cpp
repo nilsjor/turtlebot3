@@ -145,10 +145,12 @@ void TurtleBot3::init_control()
   RCLCPP_INFO(this->get_logger(), "Add Control Params");
 
   this->declare_parameter<bool>("ctrl.use_stamped_vel", false);
-  this->declare_parameter<double>("ctrl.cmd_vel_timeout", 0.5);  // Default timeout is 0.5s
+  this->declare_parameter<float>("ctrl.cmd_vel_timeout", 0.5);
+  this->declare_parameter<float>("ctrl.update_rate", 20);
 
   this->get_parameter("ctrl.use_stamped_vel", ctrl_.use_stamped_vel);
   this->get_parameter("ctrl.cmd_vel_timeout", ctrl_.cmd_vel_timeout);
+  this->get_parameter("ctrl.update_rate", ctrl_.update_rate);
 }
 
 void TurtleBot3::add_sensors()
@@ -230,7 +232,7 @@ void TurtleBot3::run()
 
   publish_timer(std::chrono::milliseconds(50));
   heartbeat_timer(std::chrono::milliseconds(100));
-  drive_timer(std::chrono::milliseconds(50));  // Add the drive timer with 50ms interval
+  control_timer(std::chrono::milliseconds(static_cast<int32_t>(1000.0/ctrl_.update_rate)));
 
   parameter_event_callback();
   cmd_vel_callback();
@@ -275,9 +277,9 @@ void TurtleBot3::heartbeat_timer(const std::chrono::milliseconds timeout)
   );
 }
 
-void TurtleBot3::drive_timer(const std::chrono::milliseconds timeout)
+void TurtleBot3::control_timer(const std::chrono::milliseconds timeout)
 {
-  drive_timer_ = this->create_wall_timer(
+  control_timer_ = this->create_wall_timer(
     timeout,
     [this]() -> void
     {
