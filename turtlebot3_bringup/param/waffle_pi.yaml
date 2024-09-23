@@ -9,6 +9,7 @@ turtlebot3_node:
     ctrl:
       use_stamped_vel: true
       cmd_vel_timeout: 0.5
+      update_rate: 50.0
 
     wheels:
       separation: 0.287

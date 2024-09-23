@@ -73,6 +73,7 @@ public:
   {
     bool use_stamped_vel;
     float cmd_vel_timeout;
+    float update_rate;
   } Control;
 
   explicit TurtleBot3(const std::string & usb_port);
@@ -96,7 +97,7 @@ private:
 
   void publish_timer(const std::chrono::milliseconds timeout);
   void heartbeat_timer(const std::chrono::milliseconds timeout);
-  void drive_timer(const std::chrono::milliseconds timeout);
+  void control_timer(const std::chrono::milliseconds timeout);
 
   void cmd_vel_callback();
   void parameter_event_callback();
@@ -116,11 +117,11 @@ private:
 
   rclcpp::TimerBase::SharedPtr publish_timer_;
   rclcpp::TimerBase::SharedPtr heartbeat_timer_;
-  rclcpp::TimerBase::SharedPtr drive_timer_;
+  rclcpp::TimerBase::SharedPtr control_timer_;
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_ = nullptr;
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_stamped_sub_ = nullptr;
-  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr cmd_vel_echo_pub_ = nullptr;
+  rclcpp::Publisher<builtin_interfaces::msg::Time>::SharedPtr cmd_vel_delay_pub_ = nullptr;
 
   geometry_msgs::msg::TwistStamped::SharedPtr last_cmd_vel_msg_ = nullptr;
 
