@@ -21,7 +21,7 @@ install(DIRECTORY launch resource DESTINATION share/${PROJECT_NAME})
 ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
-  script/ping_publisher.py
+  script/ping_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
 
