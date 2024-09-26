@@ -14,12 +14,21 @@ class PingPublisher(Node):
     def __init__(self):
         super().__init__('ping_publisher')
         qos = QoSProfile(depth=10)
+
+        # Declare parameters
+        self.declare_parameter('max_pub_hz', 50)
+        self.declare_parameter('deadline_msec', 500)
+
+        # Get parameters
+        max_freq = self.get_parameter('max_pub_hz').get_parameter_value().integer_value
+        self.deadline = self.get_parameter('deadline_msec').get_parameter_value().integer_value / 1000.0
+
+        self.timer = self.create_timer(1.0 / max_freq, self.timer_callback)
         self.pub = self.create_publisher(Vector3Stamped, 'ping', qos)
-        self.timer = self.create_timer(1/50, self.timer_callback)
 
     def timer_callback(self):
         result = subprocess.run(
-            ['ping', '-6', '-c', '1', '-W', '0.500', 'turtlebot'],
+            ['ping', '-6', '-c', '1', '-W', str(self.deadline), 'turtlebot'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
