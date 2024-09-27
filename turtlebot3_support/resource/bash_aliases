@@ -1,0 +1,49 @@
+# Source the ROS2 installation
+source /opt/ros/humble/setup.bash
+
+# TurtleBot3
+export ROS_DOMAIN_ID=30
+export TURTLEBOT3_MODEL=waffle_pi
+export LDS_MODEL=LDS-01
+
+# Set up DDS for use with Husarnet VPN
+export HUSARNET_CONFIG_PATH=$HOME
+export CYCLONEDDS_URI="$HUSARNET_CONFIG_PATH/husarnet-cyclonedds.xml"
+export FASTRTPS_DEFAULT_PROFILES_FILE="$HUSARNET_CONFIG_PATH/husarnet-fastdds-simple.xml"
+
+# Choose DDS provider
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Set up overlay workspace
+export ROS_WS_PATH=$HOME/ros2_ws
+source $ROS_WS_PATH/install/setup.bash
+alias build="(cd $ROS_WS_PATH && trap 'cd - > /dev/null' EXIT && \
+	colcon build --packages-select-regex turtlebot3)"
+
+# Add aliases for attaching/detaching the joypad
+export JOY_HARDWARE_ID="046d:c21f"
+if [ -z "$WSL_DISTRO_NAME" ]; then
+	# Get the the Bus ID from the hardware ID
+	alias attach="sudo usbip --tcp-port 3241 \
+		attach --remote localhost --busid \
+		\`usbip --tcp-port 3241 list --remote localhost \
+		| grep $JOY_HARDWARE_ID | grep -oP '\d+-\d+'\`"
+	alias detach="sudo usbip --tcp-port 3241 detach --port 0"
+else
+	# If running in WSL, use usbipd-win
+    alias attach="usbipd.exe attach --wsl --hardware-id $JOY_HARDWARE_ID"
+    alias detach="usbipd.exe detach --hardware-id $JOY_HARDWARE_ID"
+fi
+
+# Add aliases for packages
+alias bringup="ros2 launch turtlebot3_bringup robot.launch.py"
+alias rviz="ros2 launch turtlebot3_rviz2 rviz2.launch.py"
+alias teleop="ros2 launch turtlebot3_support turtlebot3_teleop_joy.py"
+alias slam="ros2 launch turtlebot3_cartographer cartographer.launch.py"
+
+# Add compound alias for joypad 
+alias joy="(attach && trap 'detach' EXIT && teleop)"
+
+# Make sure that the ROS 2 daemon is running in WSL
+if [ -n "$WSL_DISTRO_NAME" ]; then ros2 daemon start; fi

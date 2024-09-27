@@ -16,7 +16,17 @@ set(dependencies
     teleop_twist_joy
 )
 
-install(DIRECTORY launch resource DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY 
+  launch
+  resource
+  DESTINATION share/${PROJECT_NAME}
+)
+
+file(CREATE_LINK
+  ${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/resource/bash_aliases
+  $ENV{HOME}/.bash_aliases
+  SYMBOLIC
+)
 
 ament_python_install_package(${PROJECT_NAME})
 
