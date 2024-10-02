@@ -5,7 +5,7 @@ import sys
 import rclpy
 import subprocess
 
-from geometry_msgs.msg import Vector3Stamped
+from geometry_msgs.msg import PointStamped
 from rclpy.qos import QoSProfile
 from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
@@ -24,7 +24,7 @@ class PingPublisher(Node):
         self.deadline = self.get_parameter('deadline_msec').get_parameter_value().integer_value / 1000.0
 
         self.timer = self.create_timer(1.0 / max_freq, self.timer_callback)
-        self.pub = self.create_publisher(Vector3Stamped, 'ping', qos)
+        self.pub = self.create_publisher(PointStamped, 'ping', qos)
 
     def timer_callback(self):
         result = subprocess.run(
@@ -40,10 +40,10 @@ class PingPublisher(Node):
         else:
             time_ms = float('Inf')
 
-        msg = Vector3Stamped()
-        msg.header.frame_id = 'odom'
+        msg = PointStamped()
+        msg.header.frame_id = 'base_link'
         msg.header.stamp = self.get_clock().now().to_msg()
-        msg.vector.z = time_ms
+        msg.point.z = time_ms
         self.pub.publish(msg)
         # self.get_logger().info(f'Published ping time: {time_ms} ms')
 
