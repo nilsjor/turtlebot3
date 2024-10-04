@@ -7,16 +7,12 @@ export TURTLEBOT3_MODEL=waffle_pi
 export LDS_MODEL=LDS-01
 
 # Set up DDS for use with Husarnet VPN
-export HUSARNET_CONFIG_PATH=$HOME
-export CYCLONEDDS_URI="$HUSARNET_CONFIG_PATH/husarnet-cyclonedds.xml"
-export FASTRTPS_DEFAULT_PROFILES_FILE="$HUSARNET_CONFIG_PATH/husarnet-fastdds-simple.xml"
-
-# Choose DDS provider
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI=@CYCLONEDDS_URI@
+export FASTRTPS_DEFAULT_PROFILES_FILE=@FASTRTPS_DEFAULT_PROFILES_FILE@
+export RMW_IMPLEMENTATION=@RMW_IMPLEMENTATION@
 
 # Set up overlay workspace
-export ROS_WS_PATH=$HOME/ros2_ws
+export ROS_WS_PATH=@ROS_WS_PATH@
 source $ROS_WS_PATH/install/setup.bash
 alias build="(cd $ROS_WS_PATH && trap 'cd - > /dev/null' EXIT && \
 	colcon build --symlink-install --packages-select-regex turtlebot3)"
