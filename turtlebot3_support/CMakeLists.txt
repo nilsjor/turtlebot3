@@ -1,28 +1,16 @@
 cmake_minimum_required(VERSION 3.5)
 project(turtlebot3_support)
 
-
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
-find_package(rclpy REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(joy REQUIRED)
-find_package(teleop_twist_joy REQUIRED)
 
-set(CMAKE_CXX_STANDARD 17)
-
-set(dependencies
-    joy
-    teleop_twist_joy
-)
-
-install(DIRECTORY 
-  launch
-  resource
+install(
+  DIRECTORY launch resource
   DESTINATION share/${PROJECT_NAME}
 )
 
-file(CREATE_LINK
+file(
+  CREATE_LINK
   ${CMAKE_INSTALL_PREFIX}/share/${PROJECT_NAME}/resource/bash_aliases
   $ENV{HOME}/.bash_aliases
   SYMBOLIC
@@ -30,18 +18,9 @@ file(CREATE_LINK
 
 ament_python_install_package(${PROJECT_NAME})
 
-install(PROGRAMS
-  script/ping_publisher
+install(
+  PROGRAMS script/ping_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
-
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
-
-  find_package(ament_cmake_gtest REQUIRED)
-endif()
-
-ament_export_dependencies(${dependencies})
 
 ament_package()

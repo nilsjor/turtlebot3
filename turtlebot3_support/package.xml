@@ -10,11 +10,8 @@
   <license>Apache License, Version 2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
-  <depend>joy</depend>
-  <depend>teleop_twist_joy</depend>
-  <test_depend>ament_lint_common</test_depend>
-  <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_cmake_gtest</test_depend>
+  <exec_depend>joy</exec_depend>
+  <exec_depend>teleop_twist_joy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <export>
