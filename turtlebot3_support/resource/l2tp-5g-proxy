@@ -1,0 +1,135 @@
+#!/bin/bash
+
+# Set IPv6 addresses of hosts
+turtlebot_ipv6="fc94:c0d0:d4cc:ebfa:5cd4:ae57:7392:4ef0"
+damek_edge_ipv6="fc94:c7b9:9653:3718:7b43:5990:8c4e:88b8"
+
+# Also set the IPv4 addresses
+turtlebot_ipv4="$(ip -br addr | grep -oP '172\.16\.\d+\.\d+')"
+damek_edge_ipv4="10.2.58.104"
+echo -e "-------------------------------------------------"
+echo -e "WWAN IP Address: $turtlebot_ipv4"
+
+# L2TP IPs for tunnel
+turtlebot_l2tp="192.168.200.2"
+damek_edge_l2tp="192.168.200.3"
+
+# Function to handle teardown
+teardown() {
+    echo -e "\n---------------------------------------------------"
+    echo -e "Teardown initiated. Stopping L2TP services"
+
+    # Get default route before L2TP teardown
+    default_route=$(ip route show | grep -oP '(?<=10.2.58.0/24\s).*')
+
+    # Delete L2TP tunnel on turtlebot
+    echo -e "\t- Deleting L2TP tunnel on turtlebot"
+    sudo ip addr flush dev l2tp0
+    sudo ip l2tp del tunnel tunnel_id 1
+
+    # Restore default route on turtlebot
+    echo -e "\t- Restoring default route on turtlebot"
+    sudo ip route del 10.2.58.0/24 $default_route
+    sudo ip route add default $default_route
+
+    # SSH to damek-edge and delete L2TP tunnel
+    echo -e "\t- Deleting L2TP tunnel on damek-edge over SSH"
+    sudo -u nilsjor ssh nilsj@$damek_edge_ipv4 'sudo ip l2tp del tunnel tunnel_id 1'
+
+    echo -e "-------------------------------------------------"
+    echo -e "Teardown complete. L2TP session successfully stopped."
+    exit 0
+}
+
+# Trap SIGINT (Ctrl+C) and SIGTERM (kill) to run teardown
+trap teardown SIGINT SIGTERM
+
+echo -e "-------------------------------------------------"
+echo -e "Configuring interfaces on turtlebot..."
+
+# Bring down WLAN
+echo -e "\t- Bringing down WLAN interface"
+sudo ip link set wlan0 down
+
+# Set up L2TP tunnel locally on turtlebot
+echo -e "\t- Setting up L2TP tunnel"
+sudo ip l2tp add tunnel \
+    tunnel_id 1 peer_tunnel_id 1 \
+    remote $damek_edge_ipv4 local $turtlebot_ipv4 \
+    encap udp udp_sport 1701 udp_dport 1701
+
+# Set up L2TP session locally on turtlebot
+echo -e "\t- Establishing L2TP session"
+sudo ip l2tp add session \
+    tunnel_id 1 peer_tunnel_id 1 \
+    name l2tp0 \
+    session_id 1 peer_session_id 1 seq both
+
+# Bring the L2TP interface up on turtlebot
+echo -e "\t- Bringing up L2TP interface"
+sudo ip link set dev l2tp0 up
+
+# Assign IP address to the L2TP interface on turtlebot
+echo -e "\t- Assigning IP address: $turtlebot_l2tp/24"
+sudo ip addr add dev l2tp0 $turtlebot_l2tp/24
+
+# Capture the default route information on turtlebot
+echo -e "-------------------------------------------------"
+echo -e "Modifying the default route on turtlebot..."
+default_route=$(ip route show | grep -oP '(?<=^default\s).*')
+
+# Delete the existing default route on turtlebot
+echo -e "\t- Deleting the current default route"
+sudo ip route del default $default_route
+
+# Add a route for the 10.2.58.0/24 network on turtlebot via the default route
+echo -e "\t- Adding route for 10.2.58.0/24 network"
+sudo ip route add 10.2.58.0/24 $default_route
+
+# Set the new default route through the L2TP tunnel on turtlebot
+echo -e "\t- Setting the new default route"
+sudo ip route add default via $damek_edge_l2tp dev l2tp0
+
+# Now set up the L2TP tunnel and session on damek-edge via SSH
+echo -e "-------------------------------------------------"
+echo -e "Setting up L2TP tunnel on damek-edge over SSH..."
+
+sudo -u nilsjor ssh -t nilsj@$damek_edge_ipv4 /usr/bin/sh << EOF
+    echo "\t- Setting up L2TP tunnel"
+    sudo ip l2tp add tunnel \
+        tunnel_id 1 peer_tunnel_id 1 \
+        local $damek_edge_ipv4 remote $turtlebot_ipv4 \
+        encap udp udp_sport 1701 udp_dport 1701
+
+    echo "\t- Establishing L2TP session"
+    sudo ip l2tp add session \
+        tunnel_id 1 peer_tunnel_id 1 \
+        name l2tp0 \
+        session_id 1 peer_session_id 1 seq both
+
+    echo "\t- Bringing up L2TP interface"
+    sudo ip link set dev l2tp0 up
+
+    echo "\t- Assigning IP address: $damek_edge_l2tp/24"
+    sudo ip addr add dev l2tp0 $damek_edge_l2tp/24
+
+    echo "\t- Enabling IPv4 forwarding"
+    sudo sysctl -w net.ipv4.ip_forward=1 > /dev/null && sudo sysctl -p
+
+    echo "\t- Setting up NAT for L2TP traffic"
+    sudo iptables -t nat \
+        -A POSTROUTING \
+        -o enp1s0 \
+        -s 192.168.200.0/24 \
+        -j MASQUERADE
+EOF
+
+echo -e "-------------------------------------------------"
+
+# Wait for termination signal (Ctrl+C or kill)
+echo -e "5G tunnel active. Press Ctrl+C to stop."
+
+# Keep the script running and waiting for termination signal
+while true; do
+    sleep 1
+done
