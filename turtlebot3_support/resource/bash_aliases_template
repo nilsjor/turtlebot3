@@ -28,8 +28,8 @@ if [ -z "$WSL_DISTRO_NAME" ]; then
 	alias detach="sudo usbip --tcp-port 3241 detach --port 0"
 else
 	# If running in WSL, use usbipd-win
-    alias attach="usbipd.exe attach --wsl --hardware-id $JOY_HARDWARE_ID"
-    alias detach="usbipd.exe detach --hardware-id $JOY_HARDWARE_ID"
+	alias attach="usbipd.exe attach --wsl --hardware-id $JOY_HARDWARE_ID"
+	alias detach="usbipd.exe detach --hardware-id $JOY_HARDWARE_ID"
 fi
 
 # Add aliases for packages
@@ -45,3 +45,6 @@ alias joy="(attach && trap 'detach' EXIT && teleop)"
 
 # Make sure that the ROS 2 daemon is running in WSL
 if [ -n "$WSL_DISTRO_NAME" ]; then ros2 daemon start; fi
+
+# Some nice colors
+export PS1="\[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\\\$ "
