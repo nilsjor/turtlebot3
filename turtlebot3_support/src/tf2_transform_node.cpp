@@ -3,67 +3,92 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <memory>
 
-class TF2TransformNode : public rclcpp::Node
+class TransformHandler
 {
 public:
-    TF2TransformNode(const std::string &input_topic, const std::string &target_frame, const std::string &output_topic)
-        : Node("tf2_transform_node"), target_frame_(target_frame)
+    virtual void subscribe(rclcpp::Node::SharedPtr node, const std::string& input_topic, const std::string& output_topic,
+                           const std::string& target_frame, const tf2_ros::Buffer& tf_buffer) = 0;
+    virtual ~TransformHandler() = default;
+};
+
+class PointStampedHandler : public TransformHandler
+{
+public:
+    void subscribe(rclcpp::Node::SharedPtr node, const std::string& input_topic, const std::string& output_topic,
+                   const std::string& target_frame, const tf2_ros::Buffer& tf_buffer) override
     {
-        tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-        tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-        subscription_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
-            input_topic, 10,
-            std::bind(&TF2TransformNode::point_callback, this, std::placeholders::_1));
+        subscription_ = node->create_subscription<geometry_msgs::msg::PointStamped>(
+            input_topic, 10, 
+            [this, target_frame, &tf_buffer](const geometry_msgs::msg::PointStamped::SharedPtr msg) {
+                this->callback(msg, target_frame, tf_buffer);
+            });
 
-        publisher_ = this->create_publisher<geometry_msgs::msg::PointStamped>(output_topic, 10);
-        RCLCPP_INFO(this->get_logger(), "Transforming points from '%s' to frame '%s' and publishing on '%s'.",
+        publisher_ = node->create_publisher<geometry_msgs::msg::PointStamped>(output_topic, 10);
+        RCLCPP_INFO(node->get_logger(), "Transforming points from '%s' to frame '%s' and publishing on '%s'.",
                     input_topic.c_str(), target_frame.c_str(), output_topic.c_str());
     }
 
 private:
-    void point_callback(const geometry_msgs::msg::PointStamped::SharedPtr msg)
+    void callback(const geometry_msgs::msg::PointStamped::SharedPtr msg, 
+                  const std::string& target_frame, const tf2_ros::Buffer& tf_buffer)
     {
         try
         {
-            geometry_msgs::msg::TransformStamped transform_stamped = tf_buffer_->lookupTransform(
-                target_frame_,
-                msg->header.frame_id,
-                tf2::TimePointZero);
-
+            geometry_msgs::msg::TransformStamped transform = tf_buffer.lookupTransform(
+                target_frame, msg->header.frame_id, tf2::TimePointZero);
             geometry_msgs::msg::PointStamped transformed_msg;
-            tf2::doTransform(*msg, transformed_msg, transform_stamped);
+            tf2::doTransform(*msg, transformed_msg, transform);
             publisher_->publish(transformed_msg);
         }
         catch (const tf2::TransformException &ex)
         {
-            RCLCPP_WARN(this->get_logger(), "Could not transform point: %s", ex.what());
+            RCLCPP_WARN(rclcpp::get_logger("PointStampedHandler"), "Could not transform point: %s", ex.what());
         }
     }
 
-    std::string target_frame_;
     rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr subscription_;
     rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr publisher_;
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };
+
+std::shared_ptr<TransformHandler> create_handler(const std::string& type)
+{
+    if (type == "geometry_msgs/msg/PointStamped")
+    {
+        return std::make_shared<PointStampedHandler>();
+    }
+    return nullptr;
+}
 
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
 
-    if (argc < 3)
+    if (argc < 4)
     {
-        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Usage: ros2 run turtlebot_support tf2_transform <topic> <new_frame> [output_topic]");
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Usage: ros2 run turtlebot_support tf2_transform <topic> <type> <target_frame> [output_topic]");
         return 1;
     }
 
     std::string input_topic = argv[1];
-    std::string target_frame = argv[2];
-    std::string output_topic = (argc > 3) ? argv[3] : (input_topic + "_" + target_frame);
+    std::string type = argv[2];
+    std::string target_frame = argv[3];
+    std::string output_topic = (argc > 4) ? argv[4] : (input_topic + "_" + target_frame);
 
-    auto node = std::make_shared<TF2TransformNode>(input_topic, target_frame, output_topic);
+    auto handler = create_handler(type);
+    if (!handler)
+    {
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Unsupported message type: %s", type.c_str());
+        return 1;
+    }
+
+    auto node = rclcpp::Node::make_shared("tf2_transform_node");
+    tf2_ros::Buffer tf_buffer(node->get_clock());
+    tf2_ros::TransformListener tf_listener(tf_buffer);
+
+    handler->subscribe(node, input_topic, output_topic, target_frame, tf_buffer);
 
     rclcpp::spin(node);
     rclcpp::shutdown();
