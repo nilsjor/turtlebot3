@@ -27,7 +27,13 @@ private:
     {
         try
         {
-            auto transformed_msg = tf_buffer_->transform(*msg, target_frame_);
+            geometry_msgs::msg::TransformStamped transform_stamped = tf_buffer_->lookupTransform(
+                target_frame_,
+                msg->header.frame_id,
+                tf2::TimePointZero);
+
+            geometry_msgs::msg::PointStamped transformed_msg;
+            tf2::doTransform(*msg, transformed_msg, transform_stamped);
             publisher_->publish(transformed_msg);
         }
         catch (const tf2::TransformException &ex)
