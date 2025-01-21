@@ -116,12 +116,12 @@ sudo -u nilsjor ssh -t nilsj@$damek_edge_ipv4 /usr/bin/sh << EOF
     echo "\t- Enabling IPv4 forwarding"
     sudo sysctl -w net.ipv4.ip_forward=1 > /dev/null && sudo sysctl -p
 
-    echo "\t- Setting up NAT for L2TP traffic"
-    sudo iptables -t nat \
-        -A POSTROUTING \
-        -o enp1s0 \
-        -s 192.168.200.0/24 \
-        -j MASQUERADE
+    echo "\t- Setting up NAT for L2TP traffic using nf_tables"
+    sudo nft add rule ip nat \
+        postrouting \
+        oifname "enp1s0" \
+        ip saddr 192.168.200.0/24 \
+        masquerade
 EOF
 
 echo -e "-------------------------------------------------"
