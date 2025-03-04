@@ -2,8 +2,12 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 
 #include <geometry_msgs/msg/point_stamped.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/vector3_stamped.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 
 // Base class for handling different message types
 class TransformHandler
@@ -70,6 +74,18 @@ std::shared_ptr<TransformHandler> create_handler(const std::string& type)
     if (type == "geometry_msgs/msg/PointStamped")
     {
         return std::make_shared<GenericTransformHandler<geometry_msgs::msg::PointStamped>>();
+    }
+    else if (type == "geometry_msgs/msg/PoseStamped")
+    {
+        return std::make_shared<GenericTransformHandler<geometry_msgs::msg::PoseStamped>>();
+    }
+    else if (type == "geometry_msgs/msg/Vector3Stamped")
+    {
+        return std::make_shared<GenericTransformHandler<geometry_msgs::msg::Vector3Stamped>>();
+    }
+    else if (type == "sensor_msgs/msg/PointCloud2")
+    {
+        return std::make_shared<GenericTransformHandler<sensor_msgs::msg::PointCloud2>>();
     }
     // Add more conditions here to handle other message types
     return nullptr;

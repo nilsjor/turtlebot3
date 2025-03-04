@@ -4,19 +4,19 @@ project(turtlebot3_support)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(geometry_msgs REQUIRED)
 find_package(joy REQUIRED)
 find_package(teleop_twist_joy REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_sensor_msgs REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 
 set(dependencies
     rclcpp
-    geometry_msgs
     tf2_ros
     tf2_geometry_msgs
+    tf2_sensor_msgs
 )
 
 # Add the executable for tf2_transform_node
