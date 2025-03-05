@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+
+import rclpy
+
+import numpy as np
+import struct
+
+from sensor_msgs.msg import PointCloud2, PointField
+from rclpy.qos import QoSProfile
+from rclpy.node import Node
+from rclpy.executors import ExternalShutdownException
+
+_TYPE_TO_SIZE = {
+    PointField.INT8: 1,
+    PointField.UINT8: 1,
+    PointField.INT16: 2,
+    PointField.UINT16: 2,
+    PointField.INT32: 4,
+    PointField.UINT32: 4,
+    PointField.FLOAT32: 4,
+    PointField.FLOAT64: 8,
+}
+
+def add_field(fields, name, datatype, count=1):
+    """Helper function to add a field dynamically."""
+    offset = fields[-1].offset + _TYPE_TO_SIZE[fields[-1].datatype] * fields[-1].count if fields else 0
+    fields.append(PointField(name=name, offset=offset, datatype=datatype, count=count))
+    return fields
+
+def create_msg():
+        # Define the fields
+        fields = []
+        add_field(fields, 'x', PointField.FLOAT32)
+        add_field(fields, 'y', PointField.FLOAT32)
+        add_field(fields, 'z', PointField.FLOAT32)
+        add_field(fields, 'RSSI', PointField.INT8)
+        add_field(fields, 'BER', PointField.INT8)
+        add_field(fields, 'RSRP', PointField.INT32, count=4)
+        add_field(fields, 'RSRQ', PointField.INT32, count=4)
+        add_field(fields, 'SINR', PointField.INT32, count=4)
+
+        msg = PointCloud2()
+        msg.height = 1  # Unorganized point cloud
+        msg.width = 1  # Only one measurement
+        msg.fields = fields
+        msg.is_bigendian = False
+        msg.point_step = sum(_TYPE_TO_SIZE[f.datatype] * f.count for f in fields)
+        msg.row_step = msg.point_step
+        msg.is_dense = True
+
+        return msg
+
+class PointCloudPublisher(Node):
+    def __init__(self):
+        super().__init__('channel_info_publisher')
+        qos = QoSProfile(depth=10)
+
+        # Declare parameters
+        self.declare_parameter('max_pub_hz', 1)
+        self.declare_parameter('deadline_msec', 500)
+
+        # Get parameters
+        max_freq = self.get_parameter('max_pub_hz').get_parameter_value().integer_value
+        self.deadline = self.get_parameter('deadline_msec').get_parameter_value().integer_value / 1000.0
+
+        # Create message, re-use for each publish
+        self.msg = create_msg()
+
+        self.timer = self.create_timer(1.0 / max_freq, self.timer_callback)
+        self.pub = self.create_publisher(PointCloud2, 'channel_info', 10)
+
+    def timer_callback(self):
+
+        ## This is where the code to get the channel info should go
+        data = []
+        x, y, z = np.zeros(3)
+        RSSI = np.random.randint(0, 256)
+        BER = np.random.randint(0, 256)
+        RSRP = np.random.randint(0, 256, 4)
+        RSRQ = np.random.randint(0, 256, 4)
+        SINR = np.random.randint(0, 256, 4)
+        data.append(struct.pack('fffBB4B4B4B', x, y, z, RSSI, BER, *RSRP, *RSRQ, *SINR))
+
+        # Populate message with data
+        self.msg.header.stamp = self.get_clock().now().to_msg()
+        self.msg.header.frame_id = "base_link"
+        self.msg.data = b''.join(data)
+
+        # Publish message
+        self.pub.publish(self.msg)
+        # self.get_logger().info(f'Published ping time: {time_ms} ms')
+
+def main():
+    try:
+        rclpy.init()
+        node = PointCloudPublisher()
+        rclpy.spin(node)
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+
+if __name__ == '__main__':
+    main()

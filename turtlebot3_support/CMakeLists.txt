@@ -35,7 +35,7 @@ install(
 ament_python_install_package(${PROJECT_NAME})
 
 install(
-  PROGRAMS script/ping_publisher
+  PROGRAMS script/ping_publisher script/channel_info_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
 
