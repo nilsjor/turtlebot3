@@ -2,6 +2,7 @@
 
 import rclpy
 
+import serial
 import numpy as np
 import struct
 
@@ -21,34 +22,71 @@ _TYPE_TO_SIZE = {
     PointField.FLOAT64: 8,
 }
 
+_TYPE_TO_FORMAT = {
+    PointField.INT8: 'b',
+    PointField.UINT8: 'B',
+    PointField.INT16: 'h',
+    PointField.UINT16: 'H',
+    PointField.INT32: 'i',
+    PointField.UINT32: 'I',
+    PointField.FLOAT32: 'f',
+    PointField.FLOAT64: 'd',
+}
+
+def send_command(ser, command, printout=False):
+    """Send an AT command to the serial device and process the response."""
+    ser.flushInput()  # Clear input buffer
+    ser.flushOutput()  # Clear output buffer
+
+    ser.write(("AT"+command+"\r\n").encode())  # Send command
+
+    raw = ser.read_until(b'OK\r\n')  # Read response until "OK"
+
+    response = raw.decode(errors='ignore')  # Decode the response, ignoring errors
+
+    if printout: # Print the response if requested
+        print(">>>", response)
+
+    # Process response
+    for line in response.splitlines():
+        line = line.strip()  # Remove leading/trailing whitespace
+        if line.startswith(command.split("=")[0]):  # Check if the line starts with the command (ignoring args)
+            parts = line.split(":")[1].split(",")  # Get the part after `:`, then split by `,`
+            numbers = tuple(int(p) for p in parts if p.strip().lstrip('-').isdigit())  # Convert valid numbers
+            return np.array(numbers)  # Return tuple with only valid integers
+    return None  # Return None if no valid response is found
+
 def add_field(fields, name, datatype, count=1):
     """Helper function to add a field dynamically."""
     offset = fields[-1].offset + _TYPE_TO_SIZE[fields[-1].datatype] * fields[-1].count if fields else 0
     fields.append(PointField(name=name, offset=offset, datatype=datatype, count=count))
-    return fields
+    return _TYPE_TO_FORMAT[datatype] * count
 
 def create_msg():
-        # Define the fields
-        fields = []
-        add_field(fields, 'x', PointField.FLOAT32)
-        add_field(fields, 'y', PointField.FLOAT32)
-        add_field(fields, 'z', PointField.FLOAT32)
-        add_field(fields, 'RSSI', PointField.INT8)
-        add_field(fields, 'BER', PointField.INT8)
-        add_field(fields, 'RSRP', PointField.INT32, count=4)
-        add_field(fields, 'RSRQ', PointField.INT32, count=4)
-        add_field(fields, 'SINR', PointField.INT32, count=4)
+    
+    fields = []
+    format_str = ''
+    
+    # Define the fields
+    format_str += add_field(fields, 'x', PointField.FLOAT32)
+    format_str += add_field(fields, 'y', PointField.FLOAT32)
+    format_str += add_field(fields, 'z', PointField.FLOAT32)
+    format_str += add_field(fields, 'RSRP', PointField.INT32, count=4)
+    format_str += add_field(fields, 'RSRQ', PointField.INT32, count=4)
+    format_str += add_field(fields, 'SINR', PointField.INT32, count=4)
+    format_str += add_field(fields, 'CSI', PointField.UINT8, count=4)
+    format_str += add_field(fields, 'CSQ', PointField.UINT8, count=2)
 
-        msg = PointCloud2()
-        msg.height = 1  # Unorganized point cloud
-        msg.width = 1  # Only one measurement
-        msg.fields = fields
-        msg.is_bigendian = False
-        msg.point_step = sum(_TYPE_TO_SIZE[f.datatype] * f.count for f in fields)
-        msg.row_step = msg.point_step
-        msg.is_dense = True
+    msg = PointCloud2()
+    msg.height = 1  # Unorganized point cloud
+    msg.width = 1  # Only one measurement
+    msg.fields = fields
+    msg.is_bigendian = False
+    msg.point_step = sum(_TYPE_TO_SIZE[f.datatype] * f.count for f in fields)
+    msg.row_step = msg.point_step
+    msg.is_dense = True
 
-        return msg
+    return msg, format_str
 
 class PointCloudPublisher(Node):
     def __init__(self):
@@ -64,22 +102,37 @@ class PointCloudPublisher(Node):
         self.deadline = self.get_parameter('deadline_msec').get_parameter_value().integer_value / 1000.0
 
         # Create message, re-use for each publish
-        self.msg = create_msg()
+        self.msg, self.format_str = create_msg()
+        self.get_logger().debug(f'Creating PointCloud2 message using the format \'{self.format_str}\'')
 
         self.timer = self.create_timer(1.0 / max_freq, self.timer_callback)
         self.pub = self.create_publisher(PointCloud2, 'channel_info', 10)
 
     def timer_callback(self):
-
-        ## This is where the code to get the channel info should go
+        
         data = []
         x, y, z = np.zeros(3)
-        RSSI = np.random.randint(0, 256)
-        BER = np.random.randint(0, 256)
-        RSRP = np.random.randint(0, 256, 4)
-        RSRQ = np.random.randint(0, 256, 4)
-        SINR = np.random.randint(0, 256, 4)
-        data.append(struct.pack('fffBB4B4B4B', x, y, z, RSSI, BER, *RSRP, *RSRQ, *SINR))
+
+        port = "/dev/ttyUSB4"  # Adjust for your setup
+        baudrate = 115200  # Match your module's speed
+
+        with serial.Serial(port, baudrate, timeout=0.3) as ser:
+
+            # Send AT commands and print the responses
+            rsrp = send_command(ser, "+QRSRP")
+            rsrq = send_command(ser, "+QRSRQ")
+            sinr = send_command(ser, "+QSINR")
+            csi = send_command(ser, "+QNWCFG=\"lte_csi\"")
+            csq = send_command(ser, "+CSQ")
+
+        data.append(struct.pack(self.format_str,
+            x, y, z, 
+            *rsrp,
+            *rsrq,
+            *sinr,
+            *csi, 
+            *csq, 
+        ))
 
         # Populate message with data
         self.msg.header.stamp = self.get_clock().now().to_msg()
@@ -88,7 +141,15 @@ class PointCloudPublisher(Node):
 
         # Publish message
         self.pub.publish(self.msg)
-        # self.get_logger().info(f'Published ping time: {time_ms} ms')
+
+        if rclpy.logging.get_logger_effective_level(self.get_logger().name) <= rclpy.logging.LoggingSeverity.DEBUG:
+            self.get_logger().info(f'\n' +
+                f'RSRP:\t{rsrp}\n' +
+                f'RSRQ:\t{rsrq}\n' +
+                f'SINR:\t{sinr}\n' +
+                f'CSI:\t{csi}\n' +
+                f'CSQ:\t{csq}'
+            )
 
 def main():
     try:
