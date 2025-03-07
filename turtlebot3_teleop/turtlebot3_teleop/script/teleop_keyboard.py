@@ -39,7 +39,7 @@ import select
 import sys
 import rclpy
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistStamped
 from rclpy.qos import QoSProfile
 
 if os.name == 'nt':
@@ -145,7 +145,7 @@ def main():
 
     qos = QoSProfile(depth=10)
     node = rclpy.create_node('teleop_keyboard')
-    pub = node.create_publisher(Twist, 'cmd_vel', qos)
+    pub = node.create_publisher(TwistStamped, 'cmd_vel_stamped', qos)
 
     status = 0
     target_linear_velocity = 0.0
@@ -191,25 +191,28 @@ def main():
                 print(msg)
                 status = 0
 
-            twist = Twist()
+            twist = TwistStamped()
 
             control_linear_velocity = make_simple_profile(
                 control_linear_velocity,
                 target_linear_velocity,
                 (LIN_VEL_STEP_SIZE / 2.0))
+            
+            twist.header.stamp = node.get_clock().now().to_msg()
+            twist.header.frame_id = 'teleop_keyboard'
 
-            twist.linear.x = control_linear_velocity
-            twist.linear.y = 0.0
-            twist.linear.z = 0.0
+            twist.twist.linear.x = control_linear_velocity
+            twist.twist.linear.y = 0.0
+            twist.twist.linear.z = 0.0
 
             control_angular_velocity = make_simple_profile(
                 control_angular_velocity,
                 target_angular_velocity,
                 (ANG_VEL_STEP_SIZE / 2.0))
 
-            twist.angular.x = 0.0
-            twist.angular.y = 0.0
-            twist.angular.z = control_angular_velocity
+            twist.twist.angular.x = 0.0
+            twist.twist.angular.y = 0.0
+            twist.twist.angular.z = control_angular_velocity
 
             pub.publish(twist)
 
@@ -217,14 +220,14 @@ def main():
         print(e)
 
     finally:
-        twist = Twist()
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
+        twist = TwistStamped()
+        twist.twist.linear.x = 0.0
+        twist.twist.linear.y = 0.0
+        twist.twist.linear.z = 0.0
 
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = 0.0
+        twist.twist.angular.x = 0.0
+        twist.twist.angular.y = 0.0
+        twist.twist.angular.z = 0.0
 
         pub.publish(twist)
 
