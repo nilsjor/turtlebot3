@@ -4,7 +4,7 @@
   <name>turtlebot3_rviz2</name>
   <version>0.1.0</version>
   <description>
-    ROS 2 launch scripts for rviz2
+    ROS 2 launch scripts for mapping, visualization, etc.
   </description>
   <maintainer email="nilsjor@kth.se">Nils Jörgensen</maintainer>
   <license>Apache License, Version 2.0</license>
