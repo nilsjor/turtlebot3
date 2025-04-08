@@ -37,7 +37,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'teleop_keyboard = turtlebot3_teleop.script.teleop_keyboard:main'
+            'teleop_keyboard = turtlebot3_teleop.script.teleop_keyboard:main',
+            'cmd_vel_stamped_to_cmd_vel = turtlebot3_teleop.script.cmd_vel_stamped_to_cmd_vel:main',
         ],
     },
 )
